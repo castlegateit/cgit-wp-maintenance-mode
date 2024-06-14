@@ -1,0 +1,8 @@
+{
+    "name": "castlegate/cgit-wp-maintenance-mode",
+    "autoload": {
+        "psr-4": {
+            "Castlegate\\MaintenanceMode\\": "classes"
+        }
+    }
+}
