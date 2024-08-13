@@ -45,6 +45,8 @@ final class MaintenanceMode
 
         add_filter('wp_authenticate_user', [$mm, 'authenticate']);
         add_filter('login_message', [$mm, 'getLoginMessageHtml']);
+        add_filter('option_users_can_register', [$mm, 'getUsersCanRegister'], 10, 2);
+        add_filter('registration_errors', [$mm, 'getRegistrationErrors'], 10, 3);
         add_filter('woocommerce_is_purchasable', [$mm, 'isShopProductPurchasable']);
     }
 
@@ -288,5 +290,44 @@ final class MaintenanceMode
         }
 
         return false;
+    }
+
+    /**
+     * Allow user registration?
+     *
+     * Run on `option_users_can_register`. Disables user registration while
+     * maintenance mode is active.
+     *
+     * @param mixed $value
+     * @param string $option
+     * @return mixed
+     */
+    public function getUsersCanRegister($value, $option)
+    {
+        if (!static::isActive()) {
+            return $value;
+        }
+
+        return false;
+    }
+
+    /**
+     * Registration has errors?
+     *
+     * Run on `registration_errors` to prevent programmatic user registrations
+     * while maintenance mode is active.
+     *
+     * @param WP_Error $errors
+     * @param string $sanitized_user_login
+     * @param string $user_email
+     * @return WP_Error
+     */
+    public function getRegistrationErrors(WP_Error $errors, string $sanitized_user_login, string $user_email): WP_Error
+    {
+        if (static::isActive()) {
+            $errors->add('cgit_wp_maintenance_mode', __('Registration is disabled while the site is undergoing essential maintenance.'));
+        }
+
+        return $errors;
     }
 }
