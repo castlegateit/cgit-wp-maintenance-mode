@@ -86,6 +86,7 @@ final class Admin
 
         add_action('admin_init', [$admin, 'save']);
         add_action('admin_menu', [$admin, 'registerAdminPage']);
+        add_action('admin_notices', [$admin, 'renderStatusMessage']);
     }
 
     /**
@@ -144,5 +145,21 @@ final class Admin
     public function renderSaveMessage(): void
     {
         include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/saved.php';
+    }
+
+    /**
+     * Render status message
+     *
+     * @return void
+     */
+    public function renderStatusMessage(): void
+    {
+        if (!MaintenanceMode::isActive()) {
+            return;
+        }
+
+        $message = __('Maintenance mode is active.');
+
+        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/status.php';
     }
 }
