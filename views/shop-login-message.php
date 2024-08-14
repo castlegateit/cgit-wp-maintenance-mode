@@ -1,9 +1,9 @@
 <?php
 
-use Castlegate\MaintenanceMode\MaintenanceMode;
+use Castlegate\MaintenanceMode\LoginMessage;
 
 ?>
 
 <div class="woocommerce-info">
-    <b><?= esc_html__('Notice:') ?></b> <?= esc_html(MaintenanceMode::getLoginMessage(true)) ?>
+    <b><?= esc_html__('Notice:') ?></b> <?= esc_html(LoginMessage::getMessage(true)) ?>
 </div>

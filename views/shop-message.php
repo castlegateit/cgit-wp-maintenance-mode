@@ -1,9 +1,7 @@
 <?php
 
-use Castlegate\MaintenanceMode\MaintenanceMode;
+use Castlegate\MaintenanceMode\ShopMessage;
 
 ?>
 
-<div class="woocommerce-info">
-    <b><?= esc_html__('Notice:') ?></b> <?= esc_html(MaintenanceMode::getShopMessage(true)) ?>
-</div>
+<b><?= esc_html__('Notice:') ?></b> <?= esc_html(ShopMessage::getMessage(true)) ?>

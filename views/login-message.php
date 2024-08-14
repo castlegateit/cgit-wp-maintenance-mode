@@ -1,7 +1,7 @@
 <?php
 
-use Castlegate\MaintenanceMode\MaintenanceMode;
+use Castlegate\MaintenanceMode\LoginMessage;
 
 ?>
 
-<p class="message"><b><?= esc_html__('Notice:') ?></b> <?= esc_html(MaintenanceMode::getLoginMessage(true)) ?></p>
+<p class="message"><b><?= esc_html__('Notice:') ?></b> <?= esc_html(LoginMessage::getMessage(true)) ?></p>

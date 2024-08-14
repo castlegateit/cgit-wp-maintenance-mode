@@ -7,75 +7,6 @@ namespace Castlegate\MaintenanceMode;
 final class Admin
 {
     /**
-     * Admin page slug
-     *
-     * @var string
-     */
-    public const SLUG = 'cgit-wp-maintenance-mode';
-
-    /**
-     * Admin page capability
-     *
-     * @var string
-     */
-    public const CAPABILITY = 'manage_options';
-
-    /**
-     * Form ID key
-     *
-     * @var string
-     */
-    public const FORM_ID_KEY = 'form_id';
-
-    /**
-     * Form ID
-     *
-     * @var string
-     */
-    public const FORM_ID = 'cgit_maintenance_mode_form';
-
-    /**
-     * Admin page title
-     *
-     * @var string
-     */
-    public readonly string $title;
-
-    /**
-     * Active field key
-     *
-     * @var string
-     */
-    public string $activeKey;
-
-    /**
-     * Login message field key
-     *
-     * @var string
-     */
-    public string $loginMessageKey;
-
-    /**
-     * Shop message field key
-     *
-     * @var string
-     */
-    public string $shopMessageKey;
-
-    /**
-     * Construct
-     *
-     * @return void
-     */
-    public function __construct()
-    {
-        $this->title = __('Maintenance Mode');
-        $this->activeKey = MaintenanceMode::OPTION_NAME_ACTIVE;
-        $this->loginMessageKey = MaintenanceMode::OPTION_NAME_LOGIN_MESSAGE;
-        $this->shopMessageKey = MaintenanceMode::OPTION_NAME_SHOP_MESSAGE;
-    }
-
-    /**
      * Initialization
      *
      * @return void
@@ -87,6 +18,7 @@ final class Admin
         add_action('admin_init', [$admin, 'save']);
         add_action('admin_menu', [$admin, 'registerAdminPage']);
         add_action('admin_notices', [$admin, 'renderStatusMessage']);
+        add_action('admin_notices', [$admin, 'renderErrorMessage']);
     }
 
     /**
@@ -96,12 +28,14 @@ final class Admin
      */
     public function registerAdminPage(): void
     {
+        $title = __('Maintenance Mode');
+
         add_submenu_page(
             'options-general.php',
-            $this->title,
-            $this->title,
-            static::CAPABILITY,
-            static::SLUG,
+            $title,
+            $title,
+            'manage_options',
+            'cgit-wp-maintenance-mode',
             [$this, 'renderAdminPage']
         );
     }
@@ -113,7 +47,7 @@ final class Admin
      */
     public function renderAdminPage(): void
     {
-        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/admin.php';
+        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/settings.php';
     }
 
     /**
@@ -123,15 +57,20 @@ final class Admin
      */
     public function save(): void
     {
-        if (($_POST[static::FORM_ID_KEY] ?? null) !== static::FORM_ID) {
+        if (($_POST['form_id'] ?? null) !== 'cgit_wp_maintenance_mode_admin') {
             return;
         }
 
-        MaintenanceMode::toggle((bool) ($_POST[$this->activeKey] ?? false));
-        MaintenanceMode::setLoginMessage((string) ($_POST[$this->loginMessageKey] ?? ''));
+        MaintenanceMode::toggle((bool) ($_POST['cgit_wp_maintenance_mode_enabled'] ?? false));
+        StartDateTime::setDateTimeString($_POST['cgit_wp_maintenance_mode_start_date_time'] ?? null);
+        EndDateTime::setDateTimeString($_POST['cgit_wp_maintenance_mode_end_date_time'] ?? null);
 
-        if (isset($_POST[$this->shopMessageKey])) {
-            MaintenanceMode::setShopMessage((string) $_POST[$this->shopMessageKey]);
+        if (isset($_POST['cgit_wp_maintenance_mode_login_message'])) {
+            LoginMessage::setMessage((string) $_POST['cgit_wp_maintenance_mode_login_message']);
+        }
+
+        if (isset($_POST['cgit_wp_maintenance_mode_shop_message'])) {
+            ShopMessage::setMessage((string) $_POST['cgit_wp_maintenance_mode_shop_message']);
         }
 
         add_action('admin_notices', [$this, 'renderSaveMessage']);
@@ -144,7 +83,7 @@ final class Admin
      */
     public function renderSaveMessage(): void
     {
-        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/saved.php';
+        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/settings-saved-notice.php';
     }
 
     /**
@@ -154,12 +93,46 @@ final class Admin
      */
     public function renderStatusMessage(): void
     {
-        if (!MaintenanceMode::isActive()) {
+        if (!MaintenanceMode::isEnabled() || !MaintenanceMode::hasValidStartEnd()) {
             return;
         }
 
-        $message = __('Maintenance mode is active.');
+        $parts = [];
+        $start = MaintenanceMode::getStartDateTime();
+        $end = MaintenanceMode::getEndDateTime();
 
-        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/status.php';
+        if (MaintenanceMode::isActive()) {
+            $parts[] = __('Maintenance mode is active.');
+        }
+
+        if ($start) {
+            $parts[] = sprintf(__('Maintenance mode is scheduled to start at %s.'), $start->format('H:i \o\n j F Y'));
+        }
+
+        if ($end) {
+            $parts[] = sprintf(__('Maintenance mode is scheduled to end at %s.'), $end->format('H:i \o\n j F Y'));
+        }
+
+        if (!$parts) {
+            return;
+        }
+
+        $message = implode(' ', $parts);
+
+        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/status-notice.php';
+    }
+
+    /**
+     * Render error message
+     *
+     * @return void
+     */
+    public function renderErrorMessage(): void
+    {
+        if (!MaintenanceMode::isEnabled() || MaintenanceMode::hasValidStartEnd()) {
+            return;
+        }
+
+        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/date-error-notice.php';
     }
 }

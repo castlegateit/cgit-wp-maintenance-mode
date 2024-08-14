@@ -4,32 +4,12 @@ declare(strict_types=1);
 
 namespace Castlegate\MaintenanceMode;
 
+use DateTime;
 use WP_Error;
 use WP_User;
 
 final class MaintenanceMode
 {
-    /**
-     * Active option name
-     *
-     * @var string
-     */
-    public const OPTION_NAME_ACTIVE = 'cgit_maintenance_mode_active';
-
-    /**
-     * Login message option name
-     *
-     * @var string
-     */
-    public const OPTION_NAME_LOGIN_MESSAGE = 'cgit_maintenance_mode_login_message';
-
-    /**
-     * Shop message option name
-     *
-     * @var string
-     */
-    public const OPTION_NAME_SHOP_MESSAGE = 'cgit_maintenance_mode_shop_message';
-
     /**
      * Initialization
      *
@@ -41,28 +21,63 @@ final class MaintenanceMode
 
         add_action('init', [$mm, 'logout']);
         add_action('woocommerce_init', [$mm, 'addShopNotice']);
-        add_action('woocommerce_login_form_start', [$mm, 'printShopLoginMessageHtml']);
+        add_action('woocommerce_login_form_start', [$mm, 'printShopLoginMessage']);
 
         add_filter('wp_authenticate_user', [$mm, 'authenticate']);
-        add_filter('login_message', [$mm, 'getLoginMessageHtml']);
+        add_filter('login_message', [$mm, 'getLoginMessage']);
         add_filter('option_users_can_register', [$mm, 'getUsersCanRegister'], 10, 2);
         add_filter('registration_errors', [$mm, 'getRegistrationErrors'], 10, 3);
-        add_filter('woocommerce_is_purchasable', [$mm, 'isShopProductPurchasable']);
+        add_filter('woocommerce_is_purchasable', [$mm, 'isProductPurchasable']);
+    }
+
+    /**
+     * Maintenance mode is active?
+     *
+     * @return bool
+     */
+    public static function isActive(): bool
+    {
+        if (!static::isEnabled() || !static::hasValidStartEnd()) {
+            return false;
+        }
+
+        $start = static::getStartDateTime(true);
+        $end = static::getEndDateTime(true);
+        $current = static::getCurrentDateTime();
+
+        if (
+            ($start && $start > $current) ||
+            ($end && $end < $current)
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Maintenance mode is enabled?
+     *
+     * @return bool
+     */
+    public static function isEnabled(): bool
+    {
+        return (bool) get_option('cgit_wp_maintenance_mode_enabled');
     }
 
     /**
      * Toggle maintenance mode
      *
-     * @param bool|null $enable True to enable, false to disable
+     * @param bool|null
      * @return void
      */
-    public static function toggle(bool $enable = null): void
+    public static function toggle(bool $enabled = null): void
     {
-        if (is_null($enable)) {
-            $enable = !static::isActive();
+        if (is_null($enabled)) {
+            $enabled = !static::isEnabled();
         }
 
-        update_option(static::OPTION_NAME_ACTIVE, $enable);
+        update_option('cgit_wp_maintenance_mode_enabled', $enabled);
     }
 
     /**
@@ -86,97 +101,78 @@ final class MaintenanceMode
     }
 
     /**
-     * Maintenance mode is active?
+     * Return start date and time
+     *
+     * @param bool $past Return date and time even if it is in the past
+     * @return DateTime|null
+     */
+    public static function getStartDateTime(bool $past = false): ?DateTime
+    {
+        return static::sanitizeDateTime(StartDateTime::getDateTime(), $past);
+    }
+
+    /**
+     * Return end date and time
+     *
+     * @param bool $past Return date and time even if it is in the past
+     * @return DateTime|null
+     */
+    public static function getEndDateTime(bool $past = false): ?DateTime
+    {
+        return static::sanitizeDateTime(EndDateTime::getDateTime(), $past);
+    }
+
+    /**
+     * Return sanitized date and time
+     *
+     * @param DateTime|null $date
+     * @param bool $past Return date and time even if it is in the past
+     * @return DateTime|null
+     */
+    private static function sanitizeDateTime(?DateTime $date, bool $past = false): ?DateTime
+    {
+        if (is_null($date) || $past || $date > static::getCurrentDateTime()) {
+            return $date;
+        }
+
+        return null;
+    }
+
+    /**
+     * Return current date and time
+     *
+     * @return DateTime
+     */
+    public static function getCurrentDateTime(): DateTime
+    {
+        $format = AbstractDateTime::DATE_TIME_FORMAT;
+        $current = DateTime::createFromFormat($format, wp_date($format));
+
+        if ($current instanceof DateTime) {
+            return $current;
+        }
+
+        return new DateTime();
+    }
+
+    /**
+     * Start and end times are valid?
+     *
+     * If both start and end dates are set and the start date is after the end
+     * date, the values are invalid.
      *
      * @return bool
      */
-    public static function isActive(): bool
+    public static function hasValidStartEnd(): bool
     {
-        return (bool) get_option(static::OPTION_NAME_ACTIVE);
-    }
+        $start = static::getStartDateTime(true);
+        $end = static::getEndDateTime(true);
 
-    /**
-     * Set login message
-     *
-     * @param string $message
-     * @return void
-     */
-    public static function setLoginMessage(string $message): void
-    {
-        update_option(static::OPTION_NAME_LOGIN_MESSAGE, $message);
-    }
-
-    /**
-     * Login message
-     *
-     * @param bool $default Return default message if no message saved
-     * @return string
-     */
-    public static function getLoginMessage(bool $default = false): string
-    {
-        $message = get_option(static::OPTION_NAME_LOGIN_MESSAGE);
-
-        if (!is_string($message)) {
-            $message = '';
+        if (is_null($start) || is_null($end)) {
+            return true;
         }
 
-        if (!$message && $default) {
-            return static::getDefaultLoginMessage();
-        }
-
-        return $message;
-    }
-
-    /**
-     * Default login message
-     *
-     * @return string
-     */
-    public static function getDefaultLoginMessage(): string
-    {
-        return __('This site is currently undergoing essential maintenace. You will be able to log in again when the maintenance work is complete.');
-    }
-
-    /**
-     * Set shop message
-     *
-     * @param string $message
-     * @return void
-     */
-    public static function setShopMessage(string $message): void
-    {
-        update_option(static::OPTION_NAME_SHOP_MESSAGE, $message);
-    }
-
-    /**
-     * Shop message
-     *
-     * @param bool $default Return default message if no message saved
-     * @return string
-     */
-    public static function getShopMessage(bool $default = false): string
-    {
-        $message = get_option(static::OPTION_NAME_SHOP_MESSAGE);
-
-        if (!is_string($message)) {
-            $message = '';
-        }
-
-        if (!$message && $default) {
-            return static::getDefaultShopMessage();
-        }
-
-        return $message;
-    }
-
-    /**
-     * Default login message
-     *
-     * @return string
-     */
-    public static function getDefaultShopMessage(): string
-    {
-        return __('This site is currently undergoing essential maintenace. You will be able to purchase products from the shop again when the maintenance work is complete.');
+        return $start < $end;
     }
 
     /**
@@ -221,7 +217,7 @@ final class MaintenanceMode
      * @param mixed $message
      * @return mixed
      */
-    public function getLoginMessageHtml($message)
+    public function getLoginMessage($message)
     {
         if (!static::isActive()) {
             return $message;
@@ -234,23 +230,9 @@ final class MaintenanceMode
     }
 
     /**
-     * Print WooCommerce shop login message HTML if enabled
-     *
-     * Run on `woocommerce_login_form_start` action.
-     *
-     * @return void
-     */
-    public function printShopLoginMessageHtml(): void
-    {
-        if (!static::isActive()) {
-            return;
-        }
-
-        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/shop-login-message.php';
-    }
-
-    /**
      * Add WooCommerce notice if maintenance mode enabled
+     *
+     * Run on `woocommerce_init` action.
      *
      * @return void
      */
@@ -264,8 +246,12 @@ final class MaintenanceMode
             return;
         }
 
-        $message = '<b>Notice:</b> ' . esc_html(static::getShopMessage(true));
         $type = 'notice';
+
+        ob_start();
+        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/shop-message.php';
+
+        $message = ob_get_clean();
 
         if (wc_has_notice($message, $type)) {
             return;
@@ -275,7 +261,23 @@ final class MaintenanceMode
     }
 
     /**
-     * Set products as unpurchasable if maintenance mode enabled
+     * Print WooCommerce shop login message HTML if enabled
+     *
+     * Run on `woocommerce_login_form_start` action.
+     *
+     * @return void
+     */
+    public function printShopLoginMessage(): void
+    {
+        if (!static::isActive()) {
+            return;
+        }
+
+        include CGIT_WP_MAINTENANCE_MODE_PLUGIN_DIR . '/views/shop-login-message.php';
+    }
+
+    /**
+     * Prevent product purchases
      *
      * Run on `woocommerce_is_purchasable` filter.
      *
@@ -283,13 +285,13 @@ final class MaintenanceMode
      * @param mixed $product
      * @return mixed
      */
-    public function isShopProductPurchasable($purchasable, $product = null)
+    public function isProductPurchasable($purchasable, $product = null)
     {
-        if (!static::isActive()) {
-            return $purchasable;
+        if (static::isActive()) {
+            return false;
         }
 
-        return false;
+        return $purchasable;
     }
 
     /**
@@ -304,11 +306,11 @@ final class MaintenanceMode
      */
     public function getUsersCanRegister($value, $option)
     {
-        if (!static::isActive()) {
-            return $value;
+        if (static::isActive()) {
+            return false;
         }
 
-        return false;
+        return $value;
     }
 
     /**
