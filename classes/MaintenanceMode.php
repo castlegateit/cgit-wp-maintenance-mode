@@ -71,7 +71,7 @@ final class MaintenanceMode
      * @param bool|null
      * @return void
      */
-    public static function toggle(bool $enabled = null): void
+    public static function toggle(?bool $enabled = null): void
     {
         if (is_null($enabled)) {
             $enabled = !static::isEnabled();
